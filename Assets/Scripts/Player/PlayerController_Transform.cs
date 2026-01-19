@@ -1,11 +1,13 @@
 using UnityEngine;
 
-public class PlayerController_Transform : MonoBehaviour
+[RequireComponent(typeof(CharacterController))]
+public class PlayerController_CharacterController : MonoBehaviour
 {
     [Header("Movement")]
     public float moveSpeed = 5f;
     public float rotationSpeed = 10f;
-    public float jumpForce = 5f;
+    public float jumpHeight = 1.5f;
+    public float gravity = -25f;
 
     [Header("Ground Check")]
     public Transform groundCheck;
@@ -27,13 +29,15 @@ public class PlayerController_Transform : MonoBehaviour
     public Transform[] slideObjects;
     public float slideRotationX = 90f;
     public float slideDuration = 0.5f;
-    bool isSliding = false;
-    float slideTimer = 0f;
+    bool isSliding;
+    float slideTimer;
 
-    [Header("Colliders")]
-    public CapsuleCollider capsuleCollider;
+    [Header("Character Controller")]
+    public float normalHeight = 2.7f;
+    public float slideHeight = 1f;
 
-    Rigidbody rb;
+    CharacterController controller;
+    Vector3 velocity;
     Vector3 moveDirection;
     public bool isGrounded;
 
@@ -45,42 +49,26 @@ public class PlayerController_Transform : MonoBehaviour
 
     void Start()
     {
-        rb = GetComponent<Rigidbody>();
+        controller = GetComponent<CharacterController>();
+        controller.height = normalHeight;
 
         InitXAxisRotation();
-
-        // Store initial rotations of slide objects
-        if (slideObjects != null && slideObjects.Length > 0)
-        {
-            for (int i = 0; i < slideObjects.Length; i++)
-            {
-                slideObjects[i].localEulerAngles = Vector3.zero;
-            }
-        }
     }
 
     void Update()
     {
         GroundCheck();
         ReadInput();
+        HandleMovement();
+        HandleJumpAndGravity();
         HandleAnimation();
-
-        // Jump
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
-            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
 
         // Slide trigger
         if (!isSliding && isGrounded && Input.GetKeyDown(KeyCode.C) && moveDirection.magnitude > 0.1f)
             StartSlide();
 
-        // Slide handling
         if (isSliding)
             HandleSlide();
-    }
-
-    void FixedUpdate()
-    {
-        Move();
     }
 
     // ------------------ INPUT ------------------
@@ -89,7 +77,6 @@ public class PlayerController_Transform : MonoBehaviour
         float h = Input.GetAxis("Horizontal");
         float v = Input.GetAxis("Vertical");
 
-        // Use only camera Y rotation to stabilize movement
         Quaternion camYRot = Quaternion.Euler(0, cameraTransform.eulerAngles.y, 0);
         Vector3 forward = camYRot * Vector3.forward;
         Vector3 right = camYRot * Vector3.right;
@@ -98,24 +85,40 @@ public class PlayerController_Transform : MonoBehaviour
     }
 
     // ------------------ MOVEMENT ------------------
-    void Move()
+    void HandleMovement()
     {
-        // Rigidbody movement (kinematic-like)
-        Vector3 targetMove = moveDirection * moveSpeed * Time.fixedDeltaTime;
-        rb.MovePosition(rb.position + targetMove);
-
-        // Player rotation
         if (moveDirection.magnitude > 0.1f)
         {
             RotateObjectsOnXAxis();
 
             Quaternion targetRot = Quaternion.LookRotation(moveDirection);
-            rb.rotation = Quaternion.Slerp(rb.rotation, targetRot, rotationSpeed * Time.fixedDeltaTime);
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                targetRot,
+                rotationSpeed * Time.deltaTime
+            );
         }
         else
         {
             ResetRotatedObjectsOnXAxis();
         }
+
+        controller.Move(moveDirection * moveSpeed * Time.deltaTime);
+    }
+
+    // ------------------ JUMP + GRAVITY ------------------
+    void HandleJumpAndGravity()
+    {
+        if (isGrounded && velocity.y < 0)
+            velocity.y = -2f;
+
+        if (isGrounded && Input.GetKeyDown(KeyCode.Space))
+        {
+            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
+
+        velocity.y += gravity * Time.deltaTime;
+        controller.Move(velocity * Time.deltaTime);
     }
 
     // ------------------ X-AXIS ROTATION ------------------
@@ -123,7 +126,7 @@ public class PlayerController_Transform : MonoBehaviour
     {
         rotateForward = new bool[xAxisObjects.Length];
         for (int i = 0; i < rotateForward.Length; i++)
-            rotateForward[i] = i < 2; // first 2 forward, last 2 backward
+            rotateForward[i] = i < 2;
     }
 
     void RotateObjectsOnXAxis()
@@ -152,11 +155,10 @@ public class PlayerController_Transform : MonoBehaviour
         {
             if (xAxisObjects[i] == null) continue;
 
-            float currentX = xAxisObjects[i].localEulerAngles.x;
-            if (currentX > 180f) currentX -= 360f;
+            float x = xAxisObjects[i].localEulerAngles.x;
+            if (x > 180f) x -= 360f;
 
-            float newX = Mathf.MoveTowards(currentX, 0f, rotateSpeed * Time.deltaTime);
-
+            float newX = Mathf.MoveTowards(x, 0f, rotateSpeed * Time.deltaTime);
             Vector3 rot = xAxisObjects[i].localEulerAngles;
             xAxisObjects[i].localEulerAngles = new Vector3(newX, rot.y, rot.z);
         }
@@ -165,7 +167,11 @@ public class PlayerController_Transform : MonoBehaviour
     // ------------------ GROUND ------------------
     void GroundCheck()
     {
-        isGrounded = Physics.CheckSphere(groundCheck.position, groundRadius, groundMask);
+        isGrounded = Physics.CheckSphere(
+            groundCheck.position,
+            groundRadius,
+            groundMask
+        );
     }
 
     // ------------------ ANIMATION ------------------
@@ -182,9 +188,7 @@ public class PlayerController_Transform : MonoBehaviour
 
         isSliding = true;
         slideTimer = 0f;
-
-        // Shrink capsule height at start
-        capsuleCollider.height = 1f;
+        controller.height = slideHeight;
     }
 
     void HandleSlide()
@@ -192,11 +196,10 @@ public class PlayerController_Transform : MonoBehaviour
         slideTimer += Time.deltaTime;
         float t = Mathf.Clamp01(slideTimer / slideDuration);
 
-        float xRot = (t <= 0.5f) ?
-            Mathf.Lerp(0f, slideRotationX, t * 2f) :
-            Mathf.Lerp(slideRotationX, 0f, (t - 0.5f) * 2f);
+        float xRot = (t <= 0.5f)
+            ? Mathf.Lerp(0f, slideRotationX, t * 2f)
+            : Mathf.Lerp(slideRotationX, 0f, (t - 0.5f) * 2f);
 
-        // Rotate slide objects
         foreach (var obj in slideObjects)
         {
             if (obj == null) continue;
@@ -205,12 +208,9 @@ public class PlayerController_Transform : MonoBehaviour
             obj.localEulerAngles = rot;
         }
 
-        // Smoothly restore capsule height
-        float startHeight = 1f;
-        float targetHeight = 2.7f;
-        capsuleCollider.height = (t <= 0.5f) ?
-            Mathf.Lerp(targetHeight, startHeight, t * 2f) :
-            Mathf.Lerp(startHeight, targetHeight, (t - 0.5f) * 2f);
+        controller.height = (t <= 0.5f)
+            ? Mathf.Lerp(normalHeight, slideHeight, t * 2f)
+            : Mathf.Lerp(slideHeight, normalHeight, (t - 0.5f) * 2f);
 
         if (t >= 1f)
         {
