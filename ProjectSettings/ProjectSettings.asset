@@ -396,6 +396,9 @@ PlayerSettings:
   - serializedVersion: 3
     m_BuildTarget: Android
     m_Formats: 03000000
+  - serializedVersion: 3
+    m_BuildTarget: WebGL
+    m_Formats: 05000000
   playModeTestRunnerEnabled: 0
   runPlayModeTestAsEditModeTest: 0
   actionOnDotNetUnhandledException: 1
@@ -682,8 +685,8 @@ PlayerSettings:
   editorAssembliesCompatibilityLevel: 1
   m_RenderingPath: 1
   m_MobileRenderingPath: 1
-  metroPackageName: multiplayer_demo_project
-  metroPackageVersion: 
+  metroPackageName: multiplayerdemoproject
+  metroPackageVersion: 1.0.0.0
   metroCertificatePath: 
   metroCertificatePassword: 
   metroCertificateSubject: 
@@ -691,7 +694,7 @@ PlayerSettings:
   metroCertificateNotAfter: 0000000000000000
   metroApplicationDescription: multiplayer_demo_project
   wsaImages: {}
-  metroTileShortName: 
+  metroTileShortName: multiplayer_demo_project
   metroTileShowName: 0
   metroMediumTileShowName: 0
   metroLargeTileShowName: 0
@@ -759,7 +762,7 @@ PlayerSettings:
   qnxGraphicConfPath: 
   apiCompatibilityLevel: 6
   captureStartupLogs: {}
-  activeInputHandler: 1
+  activeInputHandler: 2
   windowsGamepadBackendHint: 0
   cloudProjectId: 
   framebufferDepthMemorylessMode: 0
