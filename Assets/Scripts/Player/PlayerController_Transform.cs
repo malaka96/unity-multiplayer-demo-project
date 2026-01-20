@@ -4,78 +4,134 @@ using UnityEngine;
 public class PlayerController_CharacterController : MonoBehaviour
 {
     [Header("Movement")]
-    public float moveSpeed = 5f;
-    public float rotationSpeed = 10f;
-    public float jumpHeight = 1.5f;
-    public float gravity = -25f;
+    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float rotationSpeed = 10f;
+    [SerializeField] private float jumpHeight = 1.5f;
+    [SerializeField] private float gravity = -25f;
 
     [Header("Ground Check")]
-    public Transform groundCheck;
-    public float groundRadius = 0.25f;
-    public LayerMask groundMask;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundRadius = 0.25f;
+    [SerializeField] private LayerMask groundMask;
 
-    [Header("References")]
-    public Transform cameraTransform;
-    public Animator animator;
+    [Header("Camera & Visuals")]
+    [SerializeField] private Transform cameraTransform;     // usually child of player
+    [SerializeField] private Animator animator;
 
-    [Header("X Axis Rotators")]
-    public Transform[] xAxisObjects;
-    public float minX = -30f;
-    public float maxX = 30f;
-    public float rotateSpeed = 40f;
-    bool[] rotateForward;
+    [Header("X Axis Rotators (leaning/tilting)")]
+    [SerializeField] private Transform[] xAxisObjects;
+    [SerializeField] private float minX = -30f;
+    [SerializeField] private float maxX = 30f;
+    [SerializeField] private float rotateSpeed = 40f;
 
     [Header("Slide Settings")]
-    public Transform[] slideObjects;
-    public float slideRotationX = 90f;
-    public float slideDuration = 0.5f;
-    bool isSliding;
-    float slideTimer;
+    [SerializeField] private Transform[] slideObjects;
+    [SerializeField] private float slideRotationX = 90f;
+    [SerializeField] private float slideDuration = 0.5f;
 
-    [Header("Character Controller")]
-    public float normalHeight = 2.7f;
-    public float slideHeight = 1f;
+    // Network / Multiplayer
+    [Header("Multiplayer")]
+    [SerializeField] private bool isLocalPlayer = false;
+    public string PlayerId { get; private set; }
+    public string PlayerName { get; private set; }
 
-    CharacterController controller;
-    Vector3 velocity;
-    Vector3 moveDirection;
-    public bool isGrounded;
+    // Private fields
+    private CharacterController controller;
+    private Vector3 velocity;
+    private Vector3 moveDirection;
+    private bool isGrounded;
+    private bool isSliding;
+    private float slideTimer;
+    private bool[] rotateForward;
+
+    private const float NORMAL_HEIGHT = 2.7f;
+    private const float SLIDE_HEIGHT = 1f;
+
+
+    public void Initialize(string playerId, string playerName)
+    {
+        PlayerId = playerId;
+        PlayerName = playerName;
+    }
+
+
+    public void SetAsLocalPlayer(bool local)
+    {
+        isLocalPlayer = local;
+
+        // Very important for multiplayer:
+        if (cameraTransform != null)
+        {
+            cameraTransform.gameObject.SetActive(isLocalPlayer);
+        }
+
+        
+    }
+
 
     void Awake()
     {
-        //Cursor.lockState = CursorLockMode.Locked;
-        //Cursor.visible = false;
+        controller = GetComponent<CharacterController>();
+
+  
+        if (isLocalPlayer)
+        {
+            //Cursor.lockState = CursorLockMode.Locked;
+            //Cursor.visible = false;
+        }
     }
+
 
     void Start()
     {
-        controller = GetComponent<CharacterController>();
-        controller.height = normalHeight;
-
+        controller.height = NORMAL_HEIGHT;
         InitXAxisRotation();
+
+
+        if (isLocalPlayer && cameraTransform == null)
+        {
+            Debug.LogWarning($"{name} is local player but has no camera assigned!");
+        }
+        if(!isLocalPlayer && cameraTransform != null)
+        {
+            cameraTransform.gameObject.SetActive(false);
+        }
     }
+
 
     void Update()
     {
         GroundCheck();
-        ReadInput();
+
+ 
+        if (isLocalPlayer && !isSliding)
+        {
+            ReadInput();
+        }
+
         HandleMovement();
         HandleJumpAndGravity();
         HandleAnimation();
 
-        // Slide trigger
-        if (!isSliding && isGrounded && Input.GetKeyDown(KeyCode.C) && moveDirection.magnitude > 0.1f)
+
+        if (isLocalPlayer && !isSliding && isGrounded &&
+            Input.GetKeyDown(KeyCode.C) && moveDirection.magnitude > 0.1f)
+        {
             StartSlide();
+        }
 
         if (isSliding)
+        {
             HandleSlide();
+        }
     }
 
-    // ------------------ INPUT ------------------
-    void ReadInput()
+
+  
+    private void ReadInput()
     {
-        float h = Input.GetAxis("Horizontal");
-        float v = Input.GetAxis("Vertical");
+        float h = Input.GetAxisRaw("Horizontal");
+        float v = Input.GetAxisRaw("Vertical");
 
         Quaternion camYRot = Quaternion.Euler(0, cameraTransform.eulerAngles.y, 0);
         Vector3 forward = camYRot * Vector3.forward;
@@ -84,9 +140,11 @@ public class PlayerController_CharacterController : MonoBehaviour
         moveDirection = (forward * v + right * h).normalized;
     }
 
-    // ------------------ MOVEMENT ------------------
-    void HandleMovement()
+
+
+    private void HandleMovement()
     {
+  
         if (moveDirection.magnitude > 0.1f)
         {
             RotateObjectsOnXAxis();
@@ -103,16 +161,19 @@ public class PlayerController_CharacterController : MonoBehaviour
             ResetRotatedObjectsOnXAxis();
         }
 
+  
         controller.Move(moveDirection * moveSpeed * Time.deltaTime);
     }
 
-    // ------------------ JUMP + GRAVITY ------------------
-    void HandleJumpAndGravity()
+
+
+    private void HandleJumpAndGravity()
     {
         if (isGrounded && velocity.y < 0)
             velocity.y = -2f;
 
-        if (isGrounded && Input.GetKeyDown(KeyCode.Space))
+  
+        if (isLocalPlayer && isGrounded && Input.GetKeyDown(KeyCode.Space))
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
@@ -121,81 +182,92 @@ public class PlayerController_CharacterController : MonoBehaviour
         controller.Move(velocity * Time.deltaTime);
     }
 
-    // ------------------ X-AXIS ROTATION ------------------
-    void InitXAxisRotation()
+
+
+    private void InitXAxisRotation()
     {
         rotateForward = new bool[xAxisObjects.Length];
         for (int i = 0; i < rotateForward.Length; i++)
-            rotateForward[i] = i < 2;
+            rotateForward[i] = i < 2; 
     }
 
-    void RotateObjectsOnXAxis()
+    private void RotateObjectsOnXAxis()
     {
         for (int i = 0; i < xAxisObjects.Length; i++)
         {
-            if (xAxisObjects[i] == null) continue;
+            var obj = xAxisObjects[i];
+            if (obj == null) continue;
 
-            float x = xAxisObjects[i].localEulerAngles.x;
+            float x = obj.localEulerAngles.x;
             if (x > 180f) x -= 360f;
 
             if (x >= maxX) rotateForward[i] = false;
             if (x <= minX) rotateForward[i] = true;
 
-            float delta = rotateSpeed * Time.deltaTime * (rotateForward[i] ? 1f : -1f);
+            float direction = rotateForward[i] ? 1f : -1f;
+            float delta = rotateSpeed * Time.deltaTime * direction;
+
             x = Mathf.Clamp(x + delta, minX, maxX);
 
-            Vector3 rot = xAxisObjects[i].localEulerAngles;
-            xAxisObjects[i].localEulerAngles = new Vector3(x, rot.y, rot.z);
+            obj.localEulerAngles = new Vector3(x, obj.localEulerAngles.y, obj.localEulerAngles.z);
         }
     }
 
-    void ResetRotatedObjectsOnXAxis()
+    private void ResetRotatedObjectsOnXAxis()
     {
         for (int i = 0; i < xAxisObjects.Length; i++)
         {
-            if (xAxisObjects[i] == null) continue;
+            var obj = xAxisObjects[i];
+            if (obj == null) continue;
 
-            float x = xAxisObjects[i].localEulerAngles.x;
+            float x = obj.localEulerAngles.x;
             if (x > 180f) x -= 360f;
 
             float newX = Mathf.MoveTowards(x, 0f, rotateSpeed * Time.deltaTime);
-            Vector3 rot = xAxisObjects[i].localEulerAngles;
-            xAxisObjects[i].localEulerAngles = new Vector3(newX, rot.y, rot.z);
+            obj.localEulerAngles = new Vector3(newX, obj.localEulerAngles.y, obj.localEulerAngles.z);
         }
     }
 
-    // ------------------ GROUND ------------------
-    void GroundCheck()
+
+ 
+    private void GroundCheck()
     {
-        isGrounded = Physics.CheckSphere(
-            groundCheck.position,
-            groundRadius,
-            groundMask
-        );
+        isGrounded = Physics.CheckSphere(groundCheck.position, groundRadius, groundMask);
     }
 
-    // ------------------ ANIMATION ------------------
-    void HandleAnimation()
+
+
+    private void HandleAnimation()
     {
-        // animator.SetFloat("Speed", moveDirection.magnitude);
-        // animator.SetBool("Grounded", isGrounded);
+        if (animator == null) return;
+
+        float speed = moveDirection.magnitude;
+        animator.SetFloat("Speed", speed, 0.1f, Time.deltaTime);
+        animator.SetBool("Grounded", isGrounded);
+    
     }
 
-    // ------------------ SLIDE ------------------
-    void StartSlide()
+
+
+    private void StartSlide()
     {
         if (slideObjects == null || slideObjects.Length == 0) return;
 
         isSliding = true;
         slideTimer = 0f;
-        controller.height = slideHeight;
+        controller.height = SLIDE_HEIGHT;
+
+
+        if (animator != null)
+            animator.SetTrigger("Slide");
     }
 
-    void HandleSlide()
+    private void HandleSlide()
     {
         slideTimer += Time.deltaTime;
         float t = Mathf.Clamp01(slideTimer / slideDuration);
 
+   
         float xRot = (t <= 0.5f)
             ? Mathf.Lerp(0f, slideRotationX, t * 2f)
             : Mathf.Lerp(slideRotationX, 0f, (t - 0.5f) * 2f);
@@ -208,14 +280,27 @@ public class PlayerController_CharacterController : MonoBehaviour
             obj.localEulerAngles = rot;
         }
 
+
         controller.height = (t <= 0.5f)
-            ? Mathf.Lerp(normalHeight, slideHeight, t * 2f)
-            : Mathf.Lerp(slideHeight, normalHeight, (t - 0.5f) * 2f);
+            ? Mathf.Lerp(NORMAL_HEIGHT, SLIDE_HEIGHT, t * 2f)
+            : Mathf.Lerp(SLIDE_HEIGHT, NORMAL_HEIGHT, (t - 0.5f) * 2f);
 
         if (t >= 1f)
         {
             isSliding = false;
+            controller.height = NORMAL_HEIGHT;
             InitXAxisRotation();
+        }
+    }
+
+
+  
+    private void OnDrawGizmosSelected()
+    {
+        if (groundCheck != null)
+        {
+            Gizmos.color = isGrounded ? Color.green : Color.red;
+            Gizmos.DrawWireSphere(groundCheck.position, groundRadius);
         }
     }
 }
