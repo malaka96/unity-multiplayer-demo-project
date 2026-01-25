@@ -4,289 +4,187 @@ using UnityEngine;
 public class PlayerController_CharacterController : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float rotationSpeed = 10f;
-    [SerializeField] private float jumpHeight = 1.5f;
-    [SerializeField] private float gravity = -25f;
+    [SerializeField] float moveSpeed = 5f;
+    [SerializeField] float rotationSpeed = 10f;
+    [SerializeField] float jumpHeight = 1.5f;
+    [SerializeField] float gravity = -25f;
 
     [Header("Ground Check")]
-    [SerializeField] private Transform groundCheck;
-    [SerializeField] private float groundRadius = 0.25f;
-    [SerializeField] private LayerMask groundMask;
+    [SerializeField] Transform groundCheck;
+    [SerializeField] float groundRadius = 0.25f;
+    [SerializeField] LayerMask groundMask;
 
-    [Header("Camera & Visuals")]
-    [SerializeField] private Transform cameraTransform;     // usually child of player
-    [SerializeField] private Animator animator;
+    [Header("Camera")]
+    [SerializeField] Transform cameraTransform;
 
-    [Header("X Axis Rotators (leaning/tilting)")]
-    [SerializeField] private Transform[] handsAndLegs;
-    [SerializeField] private float minX = -30f;
-    [SerializeField] private float maxX = 30f;
-    [SerializeField] private float rotateSpeed = 40f;
+    [Header("Script Anim Parts")]
+    [SerializeField] Transform[] handsAndLegs;
+    [SerializeField] float minX = -30f;
+    [SerializeField] float maxX = 30f;
+    [SerializeField] float rotateSpeed = 40f;
 
-    [Header("Slide Settings")]
-    [SerializeField] private Transform[] legs;
-    [SerializeField] private float slideRotationX = 90f;
-    [SerializeField] private float slideDuration = 0.5f;
+    [Header("Slide")]
+    [SerializeField] Transform[] legs;
+    [SerializeField] float slideRotationX = 90f;
+    [SerializeField] float slideDuration = 0.5f;
 
-    // Network / Multiplayer
-    [Header("Multiplayer")]
-    [SerializeField] private bool isLocalPlayer = false;
-    public string PlayerId { get; private set; }
-    public string PlayerName { get; private set; }
+    // NETWORK
+    public float NetworkMoveX { get; private set; }
+    public float NetworkMoveZ { get; private set; }
+    public bool NetworkIsGrounded => isGrounded;
+    public bool NetworkIsSliding => isSliding;
 
-    // Private fields
-    private CharacterController controller;
-    private Vector3 velocity;
-    private Vector3 moveDirection;
-    private bool isGrounded;
-    private bool isSliding;
-    private float slideTimer;
-    private bool[] rotateForward;
+    public bool isLocalPlayer;
+    CharacterController controller;
+    Vector3 velocity;
+    Vector3 moveDirection;
+    bool isGrounded;
+    bool isSliding;
+    float slideTimer;
+    bool[] rotateForward;
 
-    private const float NORMAL_HEIGHT = 2.7f;
-    private const float SLIDE_HEIGHT = 1f;
+    const float NORMAL_HEIGHT = 2.7f;
+    const float SLIDE_HEIGHT = 1f;
 
-
-    public void Initialize(string playerId, string playerName)
-    {
-        PlayerId = playerId;
-        PlayerName = playerName;
-    }
-
+    float lastNetworkUpdateTime;
+    const float NETWORK_TIMEOUT = 0.15f;
 
     public void SetAsLocalPlayer(bool local)
     {
         isLocalPlayer = local;
-
-        // Very important for multiplayer:
         if (cameraTransform != null)
-        {
-            cameraTransform.gameObject.SetActive(isLocalPlayer);
-        }
-
-        
+            cameraTransform.gameObject.SetActive(local);
     }
-
 
     void Awake()
     {
         controller = GetComponent<CharacterController>();
-
-  
-        if (isLocalPlayer)
-        {
-            //Cursor.lockState = CursorLockMode.Locked;
-            //Cursor.visible = false;
-        }
-    }
-
-
-    void Start()
-    {
-        controller.height = NORMAL_HEIGHT;
         InitXAxisRotation();
-
-
-        if (isLocalPlayer && cameraTransform == null)
-        {
-            Debug.LogWarning($"{name} is local player but has no camera assigned!");
-        }
-        if(!isLocalPlayer && cameraTransform != null)
-        {
-            cameraTransform.gameObject.SetActive(false);
-        }
     }
-
 
     void Update()
     {
-        GroundCheck();
-
- 
-        if (isLocalPlayer && !isSliding)
+        if (!isLocalPlayer)
         {
-            ReadInput();
+            CheckNetworkTimeout();
+            HandleScriptAnimation();
+            return;
         }
 
+        GroundCheck();
+        ReadInput();
         HandleMovement();
         HandleJumpAndGravity();
-        HandleAnimation();
 
-
-        if (isLocalPlayer && !isSliding && isGrounded &&
-            Input.GetKeyDown(KeyCode.C) && moveDirection.magnitude > 0.1f)
-        {
+        if (!isSliding && isGrounded && Input.GetKeyDown(KeyCode.C) && moveDirection.magnitude > 0.1f)
             StartSlide();
-        }
 
         if (isSliding)
-        {
             HandleSlide();
-        }
     }
 
-
-  
-    private void ReadInput()
+    void ReadInput()
     {
-        float h = Input.GetAxisRaw("Horizontal");
-        float v = Input.GetAxisRaw("Vertical");
+        NetworkMoveX = Input.GetAxisRaw("Horizontal");
+        NetworkMoveZ = Input.GetAxisRaw("Vertical");
 
-        Quaternion camYRot = Quaternion.Euler(0, cameraTransform.eulerAngles.y, 0);
-        Vector3 forward = camYRot * Vector3.forward;
-        Vector3 right = camYRot * Vector3.right;
-
-        moveDirection = (forward * v + right * h).normalized;
+        Quaternion camY = Quaternion.Euler(0, cameraTransform.eulerAngles.y, 0);
+        moveDirection = (camY * new Vector3(NetworkMoveX, 0, NetworkMoveZ)).normalized;
     }
 
-
-
-    private void HandleMovement()
+    void HandleMovement()
     {
-  
         if (moveDirection.magnitude > 0.1f)
         {
             RotateObjectsOnXAxis();
-
-            Quaternion targetRot = Quaternion.LookRotation(moveDirection);
             transform.rotation = Quaternion.Slerp(
                 transform.rotation,
-                targetRot,
+                Quaternion.LookRotation(moveDirection),
                 rotationSpeed * Time.deltaTime
             );
         }
-        else
-        {
-            ResetRotatedObjectsOnXAxis();
-        }
+        else ResetRotatedObjects();
 
-  
         controller.Move(moveDirection * moveSpeed * Time.deltaTime);
     }
 
-
-
-    private void HandleJumpAndGravity()
+    void HandleJumpAndGravity()
     {
-        if (isGrounded && velocity.y < 0)
-            velocity.y = -2f;
+        if (isGrounded && velocity.y < 0) velocity.y = -2f;
 
-  
-        if (isLocalPlayer && isGrounded && Input.GetKeyDown(KeyCode.Space))
-        {
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-        }
 
         velocity.y += gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
     }
 
-
-
-    private void InitXAxisRotation()
-    {
-        rotateForward = new bool[handsAndLegs.Length];
-        for (int i = 0; i < rotateForward.Length; i++)
-            rotateForward[i] = i < 2; 
-    }
-
-    // animate player character legs and hands using script
-    private void RotateObjectsOnXAxis()
-    {
-        for (int i = 0; i < handsAndLegs.Length; i++)
-        {
-            var obj = handsAndLegs[i];
-            if (obj == null) continue;
-
-            float x = obj.localEulerAngles.x;
-            if (x > 180f) x -= 360f;
-
-            if (x >= maxX) rotateForward[i] = false;
-            if (x <= minX) rotateForward[i] = true;
-
-            float direction = rotateForward[i] ? 1f : -1f;
-            float delta = rotateSpeed * Time.deltaTime * direction;
-
-            x = Mathf.Clamp(x + delta, minX, maxX);
-
-            obj.localEulerAngles = new Vector3(x, obj.localEulerAngles.y, obj.localEulerAngles.z);
-        }
-    }
-
-    private void ResetRotatedObjectsOnXAxis()
-    {
-        for (int i = 0; i < handsAndLegs.Length; i++)
-        {
-            var obj = handsAndLegs[i];
-            if (obj == null) continue;
-
-            float x = obj.localEulerAngles.x;
-            if (x > 180f) x -= 360f;
-
-            float newX = Mathf.MoveTowards(x, 0f, rotateSpeed * Time.deltaTime);
-            obj.localEulerAngles = new Vector3(newX, obj.localEulerAngles.y, obj.localEulerAngles.z);
-        }
-    }
-
-
- 
-    private void GroundCheck()
+    void GroundCheck()
     {
         isGrounded = Physics.CheckSphere(groundCheck.position, groundRadius, groundMask);
     }
 
-
-
-    private void HandleAnimation()
+    void InitXAxisRotation()
     {
-        if (animator == null) return;
-
-        float speed = moveDirection.magnitude;
-        animator.SetFloat("Speed", speed, 0.1f, Time.deltaTime);
-        animator.SetBool("Grounded", isGrounded);
-    
+        rotateForward = new bool[handsAndLegs.Length];
+        for (int i = 0; i < rotateForward.Length; i++)
+            rotateForward[i] = i < 2;
     }
 
-
-
-    private void StartSlide()
+    void RotateObjectsOnXAxis()
     {
-        if (legs == null || legs.Length == 0) return;
+        for (int i = 0; i < handsAndLegs.Length; i++)
+        {
+            float x = handsAndLegs[i].localEulerAngles.x;
+            if (x > 180) x -= 360;
 
+            if (x >= maxX) rotateForward[i] = false;
+            if (x <= minX) rotateForward[i] = true;
+
+            x += rotateSpeed * Time.deltaTime * (rotateForward[i] ? 1 : -1);
+            x = Mathf.Clamp(x, minX, maxX);
+
+            handsAndLegs[i].localEulerAngles =
+                new Vector3(x, handsAndLegs[i].localEulerAngles.y, 0);
+        }
+    }
+
+    void ResetRotatedObjects()
+    {
+        foreach (var t in handsAndLegs)
+        {
+            float x = t.localEulerAngles.x;
+            if (x > 180) x -= 360;
+            t.localEulerAngles =
+                new Vector3(Mathf.MoveTowards(x, 0, rotateSpeed * Time.deltaTime), t.localEulerAngles.y, 0);
+        }
+    }
+
+    void HandleScriptAnimation()
+    {
+        if (moveDirection.magnitude > 0.1f)
+            RotateObjectsOnXAxis();
+        else
+            ResetRotatedObjects();
+    }
+
+    void StartSlide()
+    {
         isSliding = true;
-        slideTimer = 0f;
+        slideTimer = 0;
         controller.height = SLIDE_HEIGHT;
-
-
-        if (animator != null)
-            animator.SetTrigger("Slide");
     }
 
-    private void HandleSlide()
+    void HandleSlide()
     {
         slideTimer += Time.deltaTime;
-        float t = Mathf.Clamp01(slideTimer / slideDuration);
+        float t = slideTimer / slideDuration;
 
-   
-        float xRot = (t <= 0.5f)
-            ? Mathf.Lerp(0f, slideRotationX, t * 2f)
-            : Mathf.Lerp(slideRotationX, 0f, (t - 0.5f) * 2f);
+        float x = Mathf.Sin(t * Mathf.PI) * slideRotationX;
+        foreach (var l in legs)
+            l.localEulerAngles = new Vector3(x, 0, 0);
 
-        foreach (var obj in legs)
-        {
-            if (obj == null) continue;
-            Vector3 rot = obj.localEulerAngles;
-            rot.x = xRot;
-            obj.localEulerAngles = rot;
-        }
-
-
-        controller.height = (t <= 0.5f)
-            ? Mathf.Lerp(NORMAL_HEIGHT, SLIDE_HEIGHT, t * 2f)
-            : Mathf.Lerp(SLIDE_HEIGHT, NORMAL_HEIGHT, (t - 0.5f) * 2f);
-
-        if (t >= 1f)
+        if (t >= 1)
         {
             isSliding = false;
             controller.height = NORMAL_HEIGHT;
@@ -294,14 +192,35 @@ public class PlayerController_CharacterController : MonoBehaviour
         }
     }
 
-
-  
-    private void OnDrawGizmosSelected()
+    // CALLED FROM NETWORK
+    public void ApplyRemoteState(MovePayload move)
     {
-        if (groundCheck != null)
+        lastNetworkUpdateTime = Time.time;
+
+        transform.position = Vector3.Lerp(
+            transform.position,
+            new Vector3(move.px, move.py, move.pz),
+            15f * Time.deltaTime
+        );
+
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            Quaternion.Euler(move.rx, move.ry, move.rz),
+            15f * Time.deltaTime
+        );
+
+        moveDirection = new Vector3(move.moveX, 0, move.moveZ).normalized;
+        isGrounded = move.isGrounded;
+        isSliding = move.isSliding;
+    }
+
+    void CheckNetworkTimeout()
+    {
+        if (Time.time - lastNetworkUpdateTime > NETWORK_TIMEOUT)
         {
-            Gizmos.color = isGrounded ? Color.green : Color.red;
-            Gizmos.DrawWireSphere(groundCheck.position, groundRadius);
+            moveDirection = Vector3.zero;
+            isSliding = false;
         }
     }
+
 }
