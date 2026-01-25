@@ -355,6 +355,7 @@ MonoBehaviour:
   - {fileID: 1438991383}
   - {fileID: 1288913795}
   - {fileID: 1491484273}
+  sendMovements: 1
 --- !u!4 &487434868
 Transform:
   m_ObjectHideFlags: 0

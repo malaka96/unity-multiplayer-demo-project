@@ -19,13 +19,13 @@ public class PlayerController_CharacterController : MonoBehaviour
     [SerializeField] private Animator animator;
 
     [Header("X Axis Rotators (leaning/tilting)")]
-    [SerializeField] private Transform[] xAxisObjects;
+    [SerializeField] private Transform[] handsAndLegs;
     [SerializeField] private float minX = -30f;
     [SerializeField] private float maxX = 30f;
     [SerializeField] private float rotateSpeed = 40f;
 
     [Header("Slide Settings")]
-    [SerializeField] private Transform[] slideObjects;
+    [SerializeField] private Transform[] legs;
     [SerializeField] private float slideRotationX = 90f;
     [SerializeField] private float slideDuration = 0.5f;
 
@@ -186,16 +186,17 @@ public class PlayerController_CharacterController : MonoBehaviour
 
     private void InitXAxisRotation()
     {
-        rotateForward = new bool[xAxisObjects.Length];
+        rotateForward = new bool[handsAndLegs.Length];
         for (int i = 0; i < rotateForward.Length; i++)
             rotateForward[i] = i < 2; 
     }
 
+    // animate player character legs and hands using script
     private void RotateObjectsOnXAxis()
     {
-        for (int i = 0; i < xAxisObjects.Length; i++)
+        for (int i = 0; i < handsAndLegs.Length; i++)
         {
-            var obj = xAxisObjects[i];
+            var obj = handsAndLegs[i];
             if (obj == null) continue;
 
             float x = obj.localEulerAngles.x;
@@ -215,9 +216,9 @@ public class PlayerController_CharacterController : MonoBehaviour
 
     private void ResetRotatedObjectsOnXAxis()
     {
-        for (int i = 0; i < xAxisObjects.Length; i++)
+        for (int i = 0; i < handsAndLegs.Length; i++)
         {
-            var obj = xAxisObjects[i];
+            var obj = handsAndLegs[i];
             if (obj == null) continue;
 
             float x = obj.localEulerAngles.x;
@@ -251,7 +252,7 @@ public class PlayerController_CharacterController : MonoBehaviour
 
     private void StartSlide()
     {
-        if (slideObjects == null || slideObjects.Length == 0) return;
+        if (legs == null || legs.Length == 0) return;
 
         isSliding = true;
         slideTimer = 0f;
@@ -272,7 +273,7 @@ public class PlayerController_CharacterController : MonoBehaviour
             ? Mathf.Lerp(0f, slideRotationX, t * 2f)
             : Mathf.Lerp(slideRotationX, 0f, (t - 0.5f) * 2f);
 
-        foreach (var obj in slideObjects)
+        foreach (var obj in legs)
         {
             if (obj == null) continue;
             Vector3 rot = obj.localEulerAngles;

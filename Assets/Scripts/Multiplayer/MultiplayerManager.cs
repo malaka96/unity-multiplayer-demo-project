@@ -20,9 +20,6 @@ public class MultiplayerManager : MonoBehaviour
     private string username;
     private GameObject localObject;
 
-    private float timeer;
-
-    public bool sendMovements = false;
 
     async void Start()
     {
@@ -39,12 +36,13 @@ public class MultiplayerManager : MonoBehaviour
         }
 #endif
 
-        timeer = Time.deltaTime;
 
         // Continuously send local object transform if connected
-        if (webSocket != null && webSocket.State == WebSocketState.Open && localObject != null && sendMovements)
+        if (webSocket != null && webSocket.State == WebSocketState.Open && localObject != null)
         {
+
             SendObjectTransform(localObject.transform.position, localObject.transform.rotation.eulerAngles);
+
         }
     }
 
