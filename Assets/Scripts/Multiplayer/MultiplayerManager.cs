@@ -20,84 +20,92 @@ public class MultiplayerManager : MonoBehaviour
     private string username;
     private GameObject localObject;
 
+    public bool sendMovements = false;
+
+    Vector3 playerLastPos;
 
     async void Start()
     {
         joinButton.onClick.AddListener(OnJoinClicked);
     }
 
-
     void Update()
     {
 #if !UNITY_WEBGL || UNITY_EDITOR
-        if (webSocket != null)
-        {
-            webSocket.DispatchMessageQueue();
-        }
+        webSocket?.DispatchMessageQueue();
 #endif
 
+        if (webSocket == null || webSocket.State != WebSocketState.Open) return;
+        if (localObject == null) return;
 
-        // Continuously send local object transform if connected
-        if (webSocket != null && webSocket.State == WebSocketState.Open && localObject != null)
-        {
+        var controller = localObject.GetComponentInChildren<PlayerController_CharacterController>();
+        if (controller == null) return;
 
-            SendObjectTransform(localObject.transform.position, localObject.transform.rotation.eulerAngles);
+        if (Input.GetKeyDown(KeyCode.U))
+            sendMovements = !sendMovements;
 
-        }
+        if(sendMovements)
+            SendPlayerState(controller);
     }
 
-    public void SendObjectTransform(Vector3 pos, Vector3 rot)
+    void SendPlayerState(PlayerController_CharacterController controller)
     {
-        MovePayload move = new MovePayload
+
+        if (Vector3.Distance(controller.transform.position, playerLastPos) < 0.01f)
+            return;
+
+        playerLastPos = controller.transform.position;
+
+        MovePayload payload = new MovePayload
         {
-            x = pos.x,
-            y = pos.y,
-            z = pos.z,
-            rx = rot.x,
-            ry = rot.y,
-            rz = rot.z,
-            isSliding = false
+            px = controller.transform.position.x,
+            py = controller.transform.position.y,
+            pz = controller.transform.position.z,
+
+            rx = controller.transform.eulerAngles.x,
+            ry = controller.transform.eulerAngles.y,
+            rz = controller.transform.eulerAngles.z,
+
+            moveX = controller.NetworkMoveX,
+            moveZ = controller.NetworkMoveZ,
+
+            isGrounded = controller.NetworkIsGrounded,
+            isSliding = controller.NetworkIsSliding
         };
 
-        ChatMessage moveMsg = new ChatMessage
+        ChatMessage msg = new ChatMessage
         {
             sender = username,
             type = "MOVE",
-            payload = JsonUtility.ToJson(move)
+            payload = JsonUtility.ToJson(payload)
         };
 
-        string json = JsonUtility.ToJson(moveMsg);
-        webSocket.SendText(json);
-        Debug.Log("Sent Object Transform: " + json);
+        webSocket.SendText(JsonUtility.ToJson(msg));
     }
 
     async void OnJoinClicked()
     {
         username = "Player" + Random.Range(1000, 9999);
-
-        // Connect to Spring Boot raw WebSocket endpoint
-        webSocket = new WebSocket("ws://localhost:1000/ws"); // use your backend port
+        webSocket = new WebSocket("ws://localhost:1000/ws");
 
         webSocket.OnOpen += () =>
         {
-            Debug.Log("Connected to server");
-
-            // Send JOIN message as plain JSON
-            ChatMessage joinMsg = new ChatMessage { sender = username, type = "JOIN" };
-            string json = JsonUtility.ToJson(joinMsg);
-            webSocket.SendText(json);
+            Debug.Log("Connected");
+            webSocket.SendText(JsonUtility.ToJson(
+                new ChatMessage { sender = username, type = "JOIN" }
+            ));
         };
 
         webSocket.OnMessage += (bytes) =>
         {
             string msg = System.Text.Encoding.UTF8.GetString(bytes);
-            Debug.Log("Message received: " + msg);
+            Debug.Log(msg);
             HandleServerMessage(msg);
         };
 
         webSocket.OnClose += (code) =>
         {
-            Debug.Log("Disconnected from server");
+            Debug.Log("Disconnected");
         };
 
         await webSocket.Connect();
@@ -109,59 +117,54 @@ public class MultiplayerManager : MonoBehaviour
 
         if (chatMsg.type == "JOIN")
         {
-            if (!players.ContainsKey(chatMsg.sender))
+            if (players.ContainsKey(chatMsg.sender)) return;
+
+            int index = players.Count % spawnPoints.Length;
+            GameObject obj = Instantiate(playerPrefab, spawnPoints[index].position, Quaternion.identity);
+            obj.name = chatMsg.sender;
+
+            var controller = obj.GetComponentInChildren<PlayerController_CharacterController>();
+            if (controller != null)
             {
-                int index = players.Count % spawnPoints.Length;
-                GameObject playerObj = Instantiate(playerPrefab, spawnPoints[index].position, Quaternion.identity);
-                playerObj.name = chatMsg.sender;
-                players.Add(chatMsg.sender, playerObj);
-                if (chatMsg.sender == username)
-                {
-                    localObject = playerObj;
-                }
+                bool isLocal = chatMsg.sender == username;
+                controller.SetAsLocalPlayer(isLocal);
             }
+            else
+                Debug.Log("controller is null");
+
+            players.Add(chatMsg.sender, obj);
+            if (chatMsg.sender == username)
+                localObject = obj;
         }
         else if (chatMsg.type == "LEAVE")
         {
-            if (players.ContainsKey(chatMsg.sender))
-            {
-                Destroy(players[chatMsg.sender]);
-                players.Remove(chatMsg.sender);
-            }
+            if (!players.ContainsKey(chatMsg.sender)) return;
+
+            Destroy(players[chatMsg.sender]);
+            players.Remove(chatMsg.sender);
         }
         else if (chatMsg.type == "MOVE")
         {
-            MovePayload move = JsonUtility.FromJson<MovePayload>(chatMsg.payload);
-
-            // If player doesn't exist yet, create them
-            if (!players.ContainsKey(chatMsg.sender))
-            {
-                int index = players.Count % spawnPoints.Length;
-                GameObject playerObj = Instantiate(playerPrefab, spawnPoints[index].position, Quaternion.identity);
-                playerObj.name = chatMsg.sender;
-                players.Add(chatMsg.sender, playerObj);
-            }
-
             if (chatMsg.sender == username) return;
+            if (!players.ContainsKey(chatMsg.sender)) return;
 
-            GameObject remoteObj = players[chatMsg.sender];
-            remoteObj.transform.position = new Vector3(move.x, move.y, move.z);
-            remoteObj.transform.rotation = Quaternion.Euler(move.rx, move.ry, move.rz);
+            MovePayload move = JsonUtility.FromJson<MovePayload>(chatMsg.payload);
+            var controller = players[chatMsg.sender]
+                .GetComponentInChildren<PlayerController_CharacterController>();
+
+            controller?.ApplyRemoteState(move);
         }
-
     }
 
-    private async void OnApplicationQuit()
+    async void OnApplicationQuit()
     {
-        if (webSocket != null)
-        {
-            // Send LEAVE before closing
-            ChatMessage leaveMsg = new ChatMessage { sender = username, type = "LEAVE" };
-            string json = JsonUtility.ToJson(leaveMsg);
-            webSocket.SendText(json);
+        if (webSocket == null) return;
 
-            await webSocket.Close();
-        }
+        webSocket.SendText(JsonUtility.ToJson(
+            new ChatMessage { sender = username, type = "LEAVE" }
+        ));
+
+        await webSocket.Close();
     }
 }
 
@@ -174,12 +177,14 @@ public class ChatMessage
 }
 
 [System.Serializable]
-public class MovePayload {
-    public float x;
-    public float y;
-    public float z;
-    public float rx;
-    public float ry;
-    public float rz;
-    public bool isSliding; 
+public class MovePayload
+{
+    public float px, py, pz;
+    public float rx, ry, rz;
+
+    public float moveX;
+    public float moveZ;
+
+    public bool isGrounded;
+    public bool isSliding;
 }

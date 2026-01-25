@@ -349,7 +349,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MultiplayerManager
   joinButton: {fileID: 105118097}
-  playerPrefab: {fileID: 4454607339139656882, guid: 3f8471aa5d5a88049a49cfea46cdebeb, type: 3}
+  playerPrefab: {fileID: 2352337141607704000, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
   spawnPoints:
   - {fileID: 627784423}
   - {fileID: 1438991383}
@@ -677,11 +677,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 487434868}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!4 &1291990166 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: -5017971254852617305, guid: cb2deb7f4fc450b459cc9f47a713bc4d, type: 3}
-  m_PrefabInstance: {fileID: 1408052742}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1321920260 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: cb2deb7f4fc450b459cc9f47a713bc4d, type: 3}
@@ -734,18 +729,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   cameraTransform: {fileID: 0}
-  animator: {fileID: 0}
-  xAxisObjects:
-  - {fileID: 2035173368}
-  - {fileID: 1709518788}
-  - {fileID: 2132349808}
-  - {fileID: 1291990166}
+  handsAndLegs: []
   minX: -30
   maxX: 30
   rotateSpeed: 200
-  slideObjects:
-  - {fileID: 2035173368}
-  - {fileID: 2132349808}
+  legs: []
   slideRotationX: -90
   slideDuration: 1.3
   isLocalPlayer: 0
@@ -1064,11 +1052,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 593064762782267060, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
       propertyPath: isLocalPlayer
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2314462332193406172, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2352337141607704000, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
       propertyPath: m_Name
@@ -1077,6 +1065,10 @@ PrefabInstance:
     - target: {fileID: 2352337141607704000, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5068011649844793686, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
+      propertyPath: m_Enabled
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5906264420706885718, guid: 26dc6f31e555af442802765d33abebd8, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1256,21 +1248,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 487434868}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!4 &1709518788 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 8891244130364874969, guid: cb2deb7f4fc450b459cc9f47a713bc4d, type: 3}
-  m_PrefabInstance: {fileID: 1408052742}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &2035173368 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 1492312403021943278, guid: cb2deb7f4fc450b459cc9f47a713bc4d, type: 3}
-  m_PrefabInstance: {fileID: 1408052742}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &2132349808 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 7604367576434143486, guid: cb2deb7f4fc450b459cc9f47a713bc4d, type: 3}
-  m_PrefabInstance: {fileID: 1408052742}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &4890076518977442351
 PrefabInstance:
   m_ObjectHideFlags: 0
