@@ -18,6 +18,8 @@ public class MultiplayerManager : MonoBehaviour
     private Dictionary<string, GameObject> players = new Dictionary<string, GameObject>();
 
     private string username;
+    public string RoomId { get; private set; }
+
     private GameObject localObject;
 
     public bool sendMovements = false;
@@ -48,6 +50,32 @@ public class MultiplayerManager : MonoBehaviour
             SendPlayerState(controller);
     }
 
+    public void CreateRoom()
+    {
+        RoomId = Random.Range(100000, 999999).ToString();
+
+        SendRoomMessage("CREATE_ROOM");
+    }
+
+    public void JoinRoom(string inputRoomId)
+    {
+        RoomId = inputRoomId;
+        SendRoomMessage("JOIN_ROOM");
+    }
+
+    void SendRoomMessage(string type)
+    {
+        ChatMessage msg = new ChatMessage
+        {
+            sender = username,
+            type = type,
+            roomId = RoomId
+        };
+
+        webSocket.SendText(JsonUtility.ToJson(msg));
+    }
+
+
     void SendPlayerState(PlayerController_CharacterController controller)
     {
 
@@ -77,8 +105,10 @@ public class MultiplayerManager : MonoBehaviour
         {
             sender = username,
             type = "MOVE",
+            roomId = RoomId,
             payload = JsonUtility.ToJson(payload)
         };
+
 
         webSocket.SendText(JsonUtility.ToJson(msg));
     }
@@ -173,6 +203,7 @@ public class ChatMessage
 {
     public string sender;
     public string type;
+    public string roomId;
     public string payload;
 }
 
